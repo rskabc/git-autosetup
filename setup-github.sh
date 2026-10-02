@@ -185,69 +185,23 @@ chmod 644 "${CONFIG_FILE}"
 echo "[OK] ${CONFIG_FILE}"
 echo
 
-echo "[5/7] Configuring GPG/pass..."
+echo "[5/7] Configuring Git credential storage..."
 
-export GNUPGHOME="${REAL_HOME}/.gnupg"
-PASSWORD_STORE_DIR="${REAL_HOME}/.password-store"
+CREDENTIAL_FILE="${REAL_HOME}/.git-credentials"
 
-mkdir -p "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
-chown -R "${REAL_USER}:${REAL_USER}" "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
-chmod 700 "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
+# Simple server setup: store HTTPS credentials in a private file.
+# No GPG, pass, pinentry, or gpg-agent is required.
+touch "${CREDENTIAL_FILE}"
+chown "${REAL_USER}:${REAL_USER}" "${CREDENTIAL_FILE}"
+chmod 600 "${CREDENTIAL_FILE}"
 
-# Headless GPG configuration: disable terminal pinentry requirements and
-# force loopback mode so key creation never waits for interactive input.
-GPG_AGENT_CONF="${GNUPGHOME}/gpg-agent.conf"
-cat > "${GPG_AGENT_CONF}" <<'EOF'
-allow-loopback-pinentry
-default-cache-ttl 3600
-max-cache-ttl 7200
-EOF
-chown "${REAL_USER}:${REAL_USER}" "${GPG_AGENT_CONF}"
-chmod 600 "${GPG_AGENT_CONF}"
+run_as_user git config --global --unset-all credential.helper >/dev/null 2>&1 || true
+run_as_user git config --global credential.helper store
 
-run_as_user env GNUPGHOME="${GNUPGHOME}" gpgconf --kill gpg-agent >/dev/null 2>&1 || true
-run_as_user env GNUPGHOME="${GNUPGHOME}" gpgconf --launch gpg-agent
+echo "[OK] Git credential storage configured."
+echo
 
-GPG_KEY_ID="$(run_as_user env GNUPGHOME="${GNUPGHOME}" \
-  gpg --batch --with-colons --list-secret-keys "${GITHUB_EMAIL}" 2>/dev/null \
-  | awk -F: '$1=="sec" {print $5; exit}')"
-
-if [[ -z "${GPG_KEY_ID}" ]]; then
-  echo "[INFO] Creating non-interactive GPG key..."
-
-  run_as_user env GNUPGHOME="${GNUPGHOME}" \
-    gpg --batch --yes --pinentry-mode loopback --passphrase '' \
-    --quick-generate-key "${GITHUB_USER} GitHub Server <${GITHUB_EMAIL}>" \
-    rsa3072 encrypt 0
-
-  GPG_KEY_ID="$(run_as_user env GNUPGHOME="${GNUPGHOME}" \
-    gpg --batch --with-colons --list-secret-keys "${GITHUB_EMAIL}" \
-    | awk -F: '$1=="sec" {print $5; exit}')"
-fi
-
-[[ -n "${GPG_KEY_ID}" ]] || {
-  echo "ERROR: GPG key gagal dibuat."
-  exit 1
-}
-
-echo "[INFO] GPG key: ${GPG_KEY_ID}"
-
-if [[ ! -f "${PASSWORD_STORE_DIR}/.gpg-id" ]]; then
-  echo "[INFO] Initializing password-store..."
-  run_as_user env GNUPGHOME="${GNUPGHOME}" PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
-    pass init "${GPG_KEY_ID}" >/dev/null
-fi
-
-[[ -f "${PASSWORD_STORE_DIR}/.gpg-id" ]] || {
-  echo "ERROR: password-store gagal diinisialisasi."
-  exit 1
-}
-
-run_as_user git config --global credential.helper manager
-run_as_user git config --global credential.credentialStore gpg
-
-echo "[OK] GPG/pass and Git Credential Manager configured."
-echoecho "[6/7] Saving GitHub PAT..."
+echo "[6/7] Saving GitHub PAT..."
 echo "GitHub user: ${GITHUB_USER}"
 echo "Masukkan Fine-grained PAT. Input tidak akan ditampilkan."
 read -rsp "GitHub PAT: " GITHUB_TOKEN
@@ -259,13 +213,11 @@ echo
 
 printf 'protocol=https\nhost=%s\nusername=%s\npassword=%s\n\n' \
   "${GITHUB_HOST}" "${GITHUB_USER}" "${GITHUB_TOKEN}" |
-  run_as_user env \
-    GNUPGHOME="${GNUPGHOME}" \
-    PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
-    git credential approve
+  run_as_user env HOME="${REAL_HOME}" git credential approve
 
 unset GITHUB_TOKEN
-echo "[OK] PAT stored through Git Credential Manager."
+chmod 600 "${CREDENTIAL_FILE}"
+echo "[OK] PAT stored in ${CREDENTIAL_FILE} (permission 600)."
 echo
 
 echo "[7/7] Testing GitHub authentication..."
