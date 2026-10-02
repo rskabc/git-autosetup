@@ -48,12 +48,71 @@ run_as_user() {
 export DEBIAN_FRONTEND=noninteractive
 
 echo "[1/7] Installing required packages..."
-apt-get update
-apt-get install -y git ca-certificates curl gnupg pass pinentry-curses libicu76
-echo "[OK] Packages installed."
-echo
 
-echo "[2/7] Installing/checking Git Credential Manager..."
+# Detect Debian version and architecture so the script works on a fresh
+# Debian server without manually installing dependencies.
+if [[ ! -r /etc/os-release ]]; then
+  echo "ERROR: /etc/os-release tidak ditemukan."
+  exit 1
+fi
+
+. /etc/os-release
+
+if [[ "${ID}" != "debian" ]]; then
+  echo "ERROR: Script ini ditujukan untuk Debian. Detected: ${ID:-unknown}"
+  exit 1
+fi
+
+ARCH="$(dpkg --print-architecture)"
+case "${ARCH}" in
+  amd64|arm64)
+    ;;
+  *)
+    echo "ERROR: Architecture ${ARCH} belum didukung."
+    exit 1
+    ;;
+esac
+
+echo "[INFO] Debian: ${VERSION_ID:-unknown}"
+echo "[INFO] Architecture: ${ARCH}"
+
+apt-get update
+
+PACKAGES=(
+  git
+  ca-certificates
+  curl
+  gnupg
+  pass
+  pinentry-curses
+)
+
+# GCM is a .NET application and requires ICU globalization support.
+# Select the ICU runtime available in the configured Debian repository.
+ICU_PACKAGE=""
+for candidate in libicu76 libicu72 libicu67 libicu66 libicu63; do
+  if apt-cache show "${candidate}" >/dev/null 2>&1; then
+    ICU_PACKAGE="${candidate}"
+    break
+  fi
+done
+
+if [[ -z "${ICU_PACKAGE}" ]]; then
+  echo "ERROR: Paket ICU (libicu) tidak ditemukan di repository Debian."
+  echo "Periksa repository APT lalu jalankan kembali script."
+  exit 1
+fi
+
+PACKAGES+=("${ICU_PACKAGE}")
+echo "[INFO] ICU runtime: ${ICU_PACKAGE}"
+
+apt-get install -y "${PACKAGES[@]}"
+
+# Refresh dynamic linker cache before starting the .NET-based GCM.
+ldconfig
+
+echo "[OK] All required packages installed."
+echoecho "[2/7] Installing/checking Git Credential Manager..."
 if ! command -v git-credential-manager >/dev/null 2>&1; then
   mkdir -p "${TMP_DIR}"
   rm -f "${GCM_DEB}"
