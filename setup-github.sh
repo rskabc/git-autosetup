@@ -59,7 +59,8 @@ if ! command -v git-credential-manager >/dev/null 2>&1; then
 
   echo "[INFO] Downloading official GCM Debian package for ${ARCH}..."
   GCM_URL="$(curl -fsSL https://api.github.com/repos/git-ecosystem/git-credential-manager/releases/latest \
-    | grep -oE "https://[^"]+${GCM_PATTERN}" \
+    | grep -oE 'https://[^"]+' \
+    | grep -E "${GCM_PATTERN}" \
     | head -n 1)"
 
   [[ -n "${GCM_URL}" ]] || {
