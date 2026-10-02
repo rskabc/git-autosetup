@@ -94,7 +94,14 @@ command -v git-credential-manager >/dev/null 2>&1 || {
   exit 1
 }
 
-run_as_user git-credential-manager --version
+GCM_VERSION="$(run_as_user git-credential-manager --version 2>&1)" || {
+  echo "ERROR: Git Credential Manager terpasang tetapi gagal dijalankan."
+  echo "${GCM_VERSION}"
+  echo "Pastikan dependency ICU/.NET runtime tersedia."
+  exit 1
+}
+
+echo "[OK] Git Credential Manager ${GCM_VERSION}"
 run_as_user git-credential-manager configure
 echo "[OK] Git Credential Manager configured."
 echo
