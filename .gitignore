@@ -1,0 +1,9 @@
+# Never commit runtime credentials or local secret stores
+.gnupg/
+.password-store/
+.git-credentials
+*.key
+*.pem
+.env
+.env.*
+!.env.example
