@@ -49,7 +49,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "[1/7] Installing required packages..."
 apt-get update
-apt-get install -y git ca-certificates curl gnupg pass pinentry-curses
+apt-get install -y git ca-certificates curl gnupg pass pinentry-curses libicu76
 echo "[OK] Packages installed."
 echo
 
