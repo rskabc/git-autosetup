@@ -27,7 +27,7 @@ GPG / pass
         |
         +---- /opt/arus
         +---- /opt/arus-portable
-        +---- /opt/billing
+        +---- /opt/arus-project
         +---- /opt/Mikrotik-Backup
         +---- other repositories
 ```
@@ -43,7 +43,7 @@ Git credential store        -> GitHub authentication
 ## Files
 
 ```text
-/opt/github/git-autosetup/
+/opt/git-autosetup/
 ├── setup-github.sh
 ├── README.md
 └── .gitignore
@@ -58,7 +58,7 @@ Runtime configuration is outside this repository:
 /root/.password-store/
 ```
 
-If the setup is executed as another user, the Git/GPG/pass paths follow that user's home directory.
+If the setup is executed as another user, Git/GPG/pass use that user's home directory.
 
 ## Requirements
 
@@ -72,69 +72,51 @@ The PAT should be limited to the repositories and permissions required by the se
 
 ## Installation
 
-Make the script executable:
+### 1. Clone the setup repository
 
 ```bash
-chmod 700 /opt/github/git-autosetup/setup-github.sh
+cd /opt
+git clone https://github.com/rskabc/git-autosetup.git
 ```
 
-Run:
+### 2. Run the setup
 
 ```bash
-sudo /opt/github/git-autosetup/setup-github.sh
+cd /opt/git-autosetup
+chmod 700 setup-github.sh
+sudo ./setup-github.sh
 ```
 
-The script installs Git, GPG, pass, and Git Credential Manager when needed.
+The script installs Git, GPG, pass, and the official Git Credential Manager Debian package when needed.
 
-## Example output
+The current GCM documentation recommends the official Linux package/tarball installation path; the script downloads the latest stable Debian package from the official GCM GitHub release API and installs it with `dpkg`. citeturn0search0turn1search0
+
+### 3. Enter the PAT
+
+When prompted:
 
 ```text
-======================================================
-       GitHub Server Authentication Setup
-======================================================
-
-[1/7] Installing required packages...
-[OK] Packages installed.
-
-[2/7] Installing/checking Git Credential Manager...
-[OK] Git Credential Manager available.
-
-[3/7] Configuring Git...
-[OK] Git configured.
-
-[4/7] Creating server configuration...
-[OK] /etc/git/github.conf
-
-[5/7] Configuring GPG/pass...
-[OK] GPG/pass and Git Credential Manager configured.
-
-[6/7] Saving GitHub PAT...
 GitHub user: rskabc
 Masukkan Fine-grained PAT. Input tidak akan ditampilkan.
-GitHub PAT: ********
-[OK] PAT stored through Git Credential Manager.
-
-[7/7] Testing GitHub authentication...
-[INFO] Test repository dilewati.
-
-======================================================
-          GitHub Setup BERHASIL
-======================================================
+GitHub PAT:
 ```
 
-## Test a private repository
+Paste the PAT and press Enter.
 
-Recommended:
+The PAT is not written into this repository, `.env`, Git remote URLs, or the setup script.
+
+### 4. Test
+
+For example:
 
 ```bash
 sudo GITHUB_TEST_REPO="rskabc/Mikrotik-Backup" \
-  /opt/github/git-autosetup/setup-github.sh
+  /opt/git-autosetup/setup-github.sh
 ```
 
 Successful output:
 
 ```text
-[7/7] Testing GitHub authentication...
 [OK] Authentication BERHASIL: rskabc/Mikrotik-Backup
 ```
 
@@ -170,7 +152,7 @@ git pull
 cd /opt/arus-portable
 git pull
 
-cd /opt/billing
+cd /opt/arus-project
 git pull
 
 cd /opt/Mikrotik-Backup
@@ -179,24 +161,20 @@ git pull
 
 ## Adding another repository
 
-1. Add the repository to the PAT's Repository access.
+If the Fine-grained PAT is restricted to selected repositories:
+
+1. Add the new repository to the PAT's Repository access.
 2. Give only the required permissions.
-3. Clone normally:
+3. Clone normally.
 
 ```bash
 cd /opt
 git clone https://github.com/rskabc/new-project.git
 ```
 
-No second GitHub authentication setup is required.
+No second Git authentication setup is required.
 
 ## Git configuration checks
-
-```bash
-git config --global --list
-```
-
-Credential helper:
 
 ```bash
 git config --global --get credential.helper
@@ -208,7 +186,7 @@ Expected:
 manager
 ```
 
-Credential store:
+Check credential store:
 
 ```bash
 git config --global --get credential.credentialStore
@@ -220,7 +198,7 @@ Expected:
 gpg
 ```
 
-Remote URL:
+Check remote:
 
 ```bash
 git remote -v
@@ -250,7 +228,7 @@ The PAT is not stored in:
 - README
 - shell commands
 
-The credential is handled through Git Credential Manager with the GPG/pass credential store.
+The credential is handled through Git Credential Manager with the GPG/pass credential store. GCM documents GPG/pass as a supported Linux credential store. citeturn0search11
 
 ## Credential separation
 
@@ -261,6 +239,7 @@ Correct:
 ```text
 GitHub authentication
   -> Git Credential Manager
+  -> GPG/pass
 
 Mikrotik-Backup/.env
   -> MikroTik/Cisco credentials
@@ -274,7 +253,7 @@ Arus/.env
 When a PAT expires or is revoked:
 
 ```bash
-sudo /opt/github/git-autosetup/setup-github.sh
+sudo /opt/git-autosetup/setup-github.sh
 ```
 
 Enter the new PAT.
@@ -283,12 +262,10 @@ Then test:
 
 ```bash
 sudo GITHUB_TEST_REPO="rskabc/Mikrotik-Backup" \
-  /opt/github/git-autosetup/setup-github.sh
+  /opt/git-autosetup/setup-github.sh
 ```
 
-## Recovery
-
-If the server is rebuilt:
+## Recovery after server rebuild
 
 1. Install/copy this tool.
 2. Create a new Fine-grained PAT or use a still-valid one.
@@ -298,14 +275,15 @@ If the server is rebuilt:
 Example:
 
 ```bash
-sudo /opt/github/git-autosetup/setup-github.sh
-
 cd /opt
-git clone https://github.com/rskabc/arus.git
-git clone https://github.com/rskabc/arus-portable.git
-git clone https://github.com/rskabc/billing.git
-git clone https://github.com/rskabc/Mikrotik-Backup.git
+git clone https://github.com/rskabc/git-autosetup.git
+
+cd /opt/git-autosetup
+chmod 700 setup-github.sh
+sudo ./setup-github.sh
 ```
+
+Then clone the required repositories.
 
 ## Important security note
 
@@ -332,9 +310,9 @@ setup-github.sh
   |
   +--> install/configure Git
   |
-  +--> configure GPG/pass
+  +--> install/configure Git Credential Manager
   |
-  +--> configure Git Credential Manager
+  +--> configure GPG/pass
   |
   +--> enter PAT once
   |
