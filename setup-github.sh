@@ -18,10 +18,12 @@ echo "======================================================"
 echo
 
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "ERROR: Jalankan sebagai root: sudo $0"
+  echo "ERROR: Jalankan sebagai root."
   exit 1
 fi
 
+# This script is designed to run as root.
+# If invoked through sudo, preserve the original user's home.
 REAL_USER="${SUDO_USER:-root}"
 if [[ "${REAL_USER}" == "root" ]]; then
   REAL_HOME="/root"
@@ -32,6 +34,15 @@ fi
 [[ -n "${REAL_HOME}" && -d "${REAL_HOME}" ]] || {
   echo "ERROR: Home directory user ${REAL_USER} tidak ditemukan."
   exit 1
+}
+
+# Run a command as REAL_USER without requiring sudo.
+run_as_user() {
+  if [[ "${REAL_USER}" == "root" ]]; then
+    env "$@"
+  else
+    su -s /bin/bash -c 'exec "$@"' -- "$@"
+  fi
 }
 
 export DEBIAN_FRONTEND=noninteractive
@@ -83,15 +94,15 @@ command -v git-credential-manager >/dev/null 2>&1 || {
   exit 1
 }
 
-sudo -u "${REAL_USER}" git-credential-manager --version
-sudo -u "${REAL_USER}" git-credential-manager configure
+run_as_user git-credential-manager --version
+run_as_user git-credential-manager configure
 echo "[OK] Git Credential Manager configured."
 echo
 
 echo "[3/7] Configuring Git..."
-sudo -u "${REAL_USER}" git config --global user.name "${GITHUB_USER}"
-sudo -u "${REAL_USER}" git config --global user.email "${GITHUB_EMAIL}"
-sudo -u "${REAL_USER}" git config --global init.defaultBranch main
+run_as_user git config --global user.name "${GITHUB_USER}"
+run_as_user git config --global user.email "${GITHUB_EMAIL}"
+run_as_user git config --global init.defaultBranch main
 echo "[OK] Git configured."
 echo
 
@@ -116,16 +127,16 @@ mkdir -p "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
 chown -R "${REAL_USER}:${REAL_USER}" "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
 chmod 700 "${GNUPGHOME}" "${PASSWORD_STORE_DIR}"
 
-GPG_KEY_ID="$(sudo -u "${REAL_USER}" env GNUPGHOME="${GNUPGHOME}" \
+GPG_KEY_ID="$(run_as_user env GNUPGHOME="${GNUPGHOME}" \
   gpg --list-secret-keys --with-colons "${GITHUB_EMAIL}" 2>/dev/null \
   | awk -F: '$1=="sec" {print $5; exit}')"
 
 if [[ -z "${GPG_KEY_ID}" ]]; then
-  sudo -u "${REAL_USER}" env GNUPGHOME="${GNUPGHOME}" \
+  run_as_user env GNUPGHOME="${GNUPGHOME}" \
     gpg --batch --passphrase '' \
     --quick-generate-key "${GITHUB_USER} GitHub Server <${GITHUB_EMAIL}>" rsa3072 encrypt 0
 
-  GPG_KEY_ID="$(sudo -u "${REAL_USER}" env GNUPGHOME="${GNUPGHOME}" \
+  GPG_KEY_ID="$(run_as_user env GNUPGHOME="${GNUPGHOME}" \
     gpg --list-secret-keys --with-colons "${GITHUB_EMAIL}" \
     | awk -F: '$1=="sec" {print $5; exit}')"
 fi
@@ -136,12 +147,12 @@ fi
 }
 
 if [[ ! -f "${PASSWORD_STORE_DIR}/.gpg-id" ]]; then
-  sudo -u "${REAL_USER}" env PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
+  run_as_user env PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
     pass init "${GPG_KEY_ID}"
 fi
 
-sudo -u "${REAL_USER}" git config --global credential.helper manager
-sudo -u "${REAL_USER}" git config --global credential.credentialStore gpg
+run_as_user git config --global credential.helper manager
+run_as_user git config --global credential.credentialStore gpg
 
 echo "[OK] GPG/pass and Git Credential Manager configured."
 echo
@@ -158,7 +169,7 @@ echo
 
 printf 'protocol=https\nhost=%s\nusername=%s\npassword=%s\n\n' \
   "${GITHUB_HOST}" "${GITHUB_USER}" "${GITHUB_TOKEN}" |
-  sudo -u "${REAL_USER}" env \
+  run_as_user env \
     GNUPGHOME="${GNUPGHOME}" \
     PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
     git credential approve
@@ -170,7 +181,7 @@ echo
 echo "[7/7] Testing GitHub authentication..."
 TEST_REPO="${GITHUB_TEST_REPO:-}"
 if [[ -n "${TEST_REPO}" ]]; then
-  if sudo -u "${REAL_USER}" env \
+  if run_as_user env \
       GNUPGHOME="${GNUPGHOME}" \
       PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR}" \
       git ls-remote "https://github.com/${TEST_REPO}.git" HEAD >/dev/null 2>&1; then
